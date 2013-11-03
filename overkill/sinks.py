@@ -149,7 +149,7 @@ class InotifySink(Sink):
         for sub, event in updates.items():
             if sub not in self.subscriptions:
                 continue
-            self.file_changed(event.path, event.mask)
+            self.file_changed(event)
 
     def file_changed(self, path, mask):
         raise NotImplementedError()
