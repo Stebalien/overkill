@@ -103,7 +103,7 @@ class PipeSink(ReaderSink):
     
     def handle_unsubscribe(self, subscription, source):
         # Restart on crash
-        if not (self.running and self.restart and self.proc.poll() == 0 and self.__start_proc()):
+        if not (self.running and self.restart and self.__start_proc()):
             super().handle_unsubscribe(subscription, source)
     
     def __start_proc(self):
