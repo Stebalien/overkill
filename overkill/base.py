@@ -115,7 +115,10 @@ class Publisher:
             pass
 
     def push_unsubscribe(self, subscription):
-        subscribers = self.subscribers.pop(subscription)
+        subscribers = self.subscribers[subscription]
+        # Don't just delete this
+        # Something else might be relying on the dictionary.
+        self.subscribers[subscription] = set()
         for sink in subscribers:
             sink.receive_unsubscribe(subscription, self)
 
