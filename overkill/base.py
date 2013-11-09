@@ -57,6 +57,8 @@ class Subscriber:
             else:
                 raise NoSourceError()
         self.subscriptions[subscription].remove(source)
+        if not self.subscriptions[subscription]:
+            del self.subscriptions[subscription]
         source.unsubscribe(self, subscription)
 
     @manager.queued
@@ -70,6 +72,8 @@ class Subscriber:
     @manager.queued
     def receive_unsubscribe(self, subscription, source):
         self.subscriptions[subscription].remove(source)
+        if not self.subscriptions[subscription]:
+            del self.subscriptions[subscription]
         self.handle_unsubscribe(subscription, source)
 
     def handle_unsubscribe(self, subscription, source):
@@ -110,20 +114,19 @@ class Publisher:
     def unsubscribe(self, subscriber, subscription):
         try:
             self.subscribers[subscription].remove(subscriber)
+            if not self.subscribers[subscription]:
+                del self.subscribers[subscription]
             self.on_unsubscribe(subscriber, subscription)
         except KeyError:
             pass
 
     def push_unsubscribe(self, subscription):
-        subscribers = self.subscribers[subscription]
-        # Don't just delete this
-        # Something else might be relying on the dictionary.
-        self.subscribers[subscription] = set()
+        subscribers = self.subscribers.pop(subscription)
         for sink in subscribers:
             sink.receive_unsubscribe(subscription, self)
 
     def is_subscribed(self, subscription):
-        return bool(self.subscribers.get(subscription, False))
+        return subscription in self.subscribers
 
     def push_updates(self, updates):
         self.published_data.update(updates)

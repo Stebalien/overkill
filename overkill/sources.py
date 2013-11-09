@@ -11,7 +11,7 @@ class Source(Runnable, Publisher):
         super().__init__(*args, **kwargs)
 
     def stop(self, *args, **kwargs):
-        for subscription in self.subscribers:
+        for subscription in tuple(self.subscribers.keys()):
             self.push_unsubscribe(subscription)
         return super().stop(*args, **kwargs)
 
@@ -23,7 +23,7 @@ class Source(Runnable, Publisher):
         super().unsubscribe(*args, **kwargs)
         # Don't need to lock because stop will lock and check
         # running again.
-        if not any(self.subscriptions) and self.running:
+        if not self.subscriptions and self.running:
             self.stop()
 
 class InterruptableWaiter:
