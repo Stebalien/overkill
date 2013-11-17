@@ -2,6 +2,7 @@ from .base import Runnable, Subscriber
 from .sources import get_fdsource, get_fwsource, get_timersource
 import subprocess, pyinotify
 import stat, os
+from time import time
 
 class Sink(Runnable, Subscriber):
     def __init__(self, *args, **kwargs):
@@ -95,24 +96,45 @@ class PipeSink(ReaderSink):
     cmd = None
     proc = None
     restart = False
+    max_restarts = 5
+    start_limit_interval = 10
 
     def start(self):
         if super().start():
+            self._restarts = 0
+            self._last_restart = time()//1000
             return self.__start_proc()
         return False
     
+
+    def __maybe_restart(self):
+        if self.running and self.restart:
+            now = time()//1000
+            self._restarts -= min(
+                (self._restarts//self.start_limit_interval)*(now - self._last_restart),
+                self._restarts
+            )
+            self._last_restart = now
+            if (self._restarts//self.start_limit_interval) < self.max_restarts:
+                self._restarts += self.start_limit_interval
+                return self.__start_proc()
+        return False
+
     def handle_unsubscribe(self, subscription, source):
         # Restart on crash
-        if not (self.running and self.restart and self.__start_proc()):
+        if not self.__maybe_restart():
             super().handle_unsubscribe(subscription, source)
     
     def __start_proc(self):
-        if not (self.proc and self.proc.poll() is None):
-            self.proc = subprocess.Popen(self.cmd,
-                                         stdout=subprocess.PIPE,
-                                         stderr=open(os.devnull, 'wb'))
-            self.start_with_source(self.proc.stdout)
-            return True
+        try:
+            if not (self.proc and self.proc.poll() is None):
+                self.proc = subprocess.Popen(self.cmd,
+                                             stdout=subprocess.PIPE,
+                                             stderr=open(os.devnull, 'wb'))
+                self.start_with_source(self.proc.stdout)
+                return True
+        except:
+            pass
         return False
 
     def stop(self):
