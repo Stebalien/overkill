@@ -16,6 +16,6 @@ TODO: Document more.
 License
 -------
 
-This project is under the GPLv3 (or later)
+This project is under the [GPLv3](http://www.gnu.org/licenses/gpl.html).
 
-[<img src="http://www.gnu.org/graphics/gplv3-127x51.png" alt="GPL V3" />](http://www.gnu.org/licenses/gpl.html)
+
