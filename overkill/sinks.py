@@ -15,11 +15,10 @@
 #    along with Overkill.  If not, see <http://www.gnu.org/licenses/>.
 ##
 
-from .base import Runnable, Subscriber
+from .base import Runnable, Subscriber, Subprocess
 from .sources import get_fdsource, get_fwsource, get_timersource
 import subprocess, pyinotify
 import stat, os
-from time import time
 
 class Sink(Runnable, Subscriber):
     def __init__(self, *args, **kwargs):
@@ -49,7 +48,7 @@ class SimpleSink(Sink):
 
 class ReaderSink(Sink):
 
-    def start_with_source(self, source):
+    def _start_with_source(self, source):
         self.source_file = source
         self.subscribe_to(source, get_fdsource())
 
@@ -88,7 +87,7 @@ class FifoSink(ReaderSink):
                 else:
                     raise RuntimeError()
             self.fifo_file = open(self.fifo_path)
-            self.start_with_source(self.fifo_file)
+            self._start_with_source(self.fifo_file)
             status = super().start()
             if not self.running:
                 self.stop()
@@ -109,63 +108,19 @@ class FifoSink(ReaderSink):
             return True
         return False
 
-class PipeSink(ReaderSink):
-    cmd = None
-    proc = None
-    restart = False
-    max_restarts = 5
-    start_limit_interval = 10
-
-    def start(self):
-        if super().start():
-            self._restarts = 0
-            self._last_restart = time()//1000
-            return self.__start_proc()
-        return False
-    
-
-    def __maybe_restart(self):
-        if self.running and self.restart:
-            now = time()//1000
-            self._restarts -= min(
-                (self._restarts//self.start_limit_interval)*(now - self._last_restart),
-                self._restarts
-            )
-            self._last_restart = now
-            if (self._restarts//self.start_limit_interval) < self.max_restarts:
-                self._restarts += self.start_limit_interval
-                return self.__start_proc()
-        return False
+class PipeSink(Subprocess, ReaderSink):
+    stdout = subprocess.PIPE
 
     def handle_unsubscribe(self, subscription, source):
         # Restart on crash
-        if not self.__maybe_restart():
+        if not self._maybe_restart():
             super().handle_unsubscribe(subscription, source)
     
-    def __start_proc(self):
-        try:
-            if not (self.proc and self.proc.poll() is None):
-                self.proc = subprocess.Popen(self.cmd,
-                                             stdout=subprocess.PIPE,
-                                             stderr=open(os.devnull, 'wb'))
-                self.start_with_source(self.proc.stdout)
-                return True
-        except:
-            pass
-        return False
-
-    def stop(self):
-        if super().stop():
-            try:
-                self.proc.terminate()
-            except:
-                pass
+    def _start_subprocess(self):
+        if super()._start_subprocess():
+            self._start_with_source(self.proc.stdout)
             return True
         return False
-
-    def wait(self):
-        super().wait()
-        self.proc.wait()
 
 class InotifySink(Sink):
     recursive = False

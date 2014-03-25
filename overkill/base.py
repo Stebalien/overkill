@@ -18,6 +18,8 @@
 from . import manager
 from threading import Lock
 from .exceptions import NotPublishingError, NoSourceError
+import subprocess, os
+from time import time
 
 __all__=("Runnable", "Subscriber", "Publisher")
 
@@ -88,10 +90,14 @@ class Subscriber:
 
     @manager.queued
     def receive_unsubscribe(self, subscription, source):
-        self.subscriptions[subscription].remove(source)
+        try:
+            self.subscriptions[subscription].remove(source)
+        except KeyError:
+            return False
         if not self.subscriptions[subscription]:
             del self.subscriptions[subscription]
         self.handle_unsubscribe(subscription, source)
+        return True
 
     def handle_unsubscribe(self, subscription, source):
         raise NotImplementedError("%s, %s" % (self, subscription))
@@ -115,7 +121,7 @@ class Publisher:
     @manager.queued
     def subscribe(self, subscriber, subscription):
         if not self.is_publishing(subscription):
-            raise NotPublishingError(self, subscription)
+            raise NotPublishingError(self, subscription, subscriber)
         self.subscribers.setdefault(subscription, set()).add(subscriber)
         if subscription in self.published_data:
             subscriber.receive_updates(self.published_data, self)
@@ -138,7 +144,10 @@ class Publisher:
             pass
 
     def push_unsubscribe(self, subscription):
-        subscribers = self.subscribers.pop(subscription)
+        try:
+            subscribers = self.subscribers.pop(subscription)
+        except KeyError:
+            return
         for sink in subscribers:
             sink.receive_unsubscribe(subscription, self)
 
@@ -152,3 +161,65 @@ class Publisher:
         ):
             subscriber.receive_updates(updates, self)
 
+class Subprocess(Runnable):
+    cmd = None
+    proc = None
+    restart = False
+    max_restarts = 5
+    start_limit_interval = 10
+    
+    stdout=stderr=open(os.devnull, 'wb')
+    stdin=None
+
+    def start(self):
+        if super().start():
+            self._restarts = 0
+            self._last_restart = time()//1000
+            return self._start_subprocess()
+        return False
+
+    def _maybe_restart(self):
+        if self.running and self.restart:
+            now = time()//1000
+            self._restarts -= min(
+                (self._restarts//self.start_limit_interval)*(now - self._last_restart),
+                self._restarts
+            )
+            self._last_restart = now
+            if (self._restarts//self.start_limit_interval) < self.max_restarts:
+                self._restarts += self.start_limit_interval
+                return self._start_subprocess()
+        return False
+
+    def _start_subprocess(self):
+        with self._state_lock:
+            try:
+                if not (self.proc and self.proc.poll() is None):
+                    self.proc = subprocess.Popen(self.cmd, stderr=self.stderr, stdout=self.stdout, stdin=self.stdin)
+            except:
+                return False
+            return True
+
+    def stop(self):
+        if super().stop():
+            try:
+                self.proc.terminate()
+            except:
+                pass
+            return True
+        return False
+
+    def restart(self):
+        if not self.running:
+            return
+        try:
+            self.proc.termintate()
+        except:
+            pass
+        self._start_subprocess()
+
+    def wait(self):
+        with self._state_lock:
+            if not self.running:
+                raise RuntimeError("Not Running")
+            self.proc.wait()

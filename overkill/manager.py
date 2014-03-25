@@ -15,11 +15,9 @@
 #    along with Overkill.  If not, see <http://www.gnu.org/licenses/>.
 ##
 
-from threading import Event, Lock
-import sys
+# Note: Global imports won't work (because we set the module).
 
 manager = None
-
 class Manager:
     def add_source(self, source):
         self.aggregator.add_source(source)
@@ -28,11 +26,10 @@ class Manager:
         self.__sinks.add(sink)
 
     def __init__(self):
+        import queue
         self.__sinks = set()
         self.__aggregator = None
-        self.__int = Event()
-        self.__lock = Lock()
-        self.__queue = []
+        self.__queue = queue.Queue()
 
     @property
     def aggregator(self):
@@ -46,38 +43,53 @@ class Manager:
             self.queue(fn, args, kwargs)
         return do
     
-    def queue(self, fn, args, kwargs):
-        with self.__lock:
-            self.__queue.append((fn, args, kwargs))
-            self.__int.set()
+    def queue(self, fn, args=None, kwargs=None):
+        self.__queue.put((fn, args, kwargs))
+
+    def __flush_queue(self):
+        import queue
+        while self.__queue:
+            try:
+                task = self.__queue.get_nowait()
+            except queue.Empty:
+                return
+            self.__handle_task(task)
+
+    def __handle_task(self, task):
+        fn, args, kwargs = task
+        try:
+            fn(*(args or ()), **(kwargs or {}))
+        except Exception:
+            import traceback
+            traceback.print_exc()
 
     def run(self):
         try:
             for sink in self.__sinks:
                 sink.start()
-            while self.__int.wait():
-                with self.__lock:
-                    self.__int.clear()
-                    if not self.__queue:
-                        continue
-                    waiting = self.__queue
-                    self.__queue = []
-                for fn, args, kwargs in waiting:
-                    try:
-                        fn(*args, **kwargs)
-                    except:
-                        import traceback
-                        traceback.print_exc()
+            while True:
+                self.__handle_task(self.__queue.get())
         except SystemExit:
+            pass
+        except KeyboardInterrupt:
             pass
         except BaseException:
             import traceback
             traceback.print_exc()
         finally:
+            # Flush queue
+            self.__flush_queue()
             for sink in self.__sinks:
                 try:
                     sink.stop()
-                except BaseException as e:
-                    print(e)
+                    self.__flush_queue()
+                except BaseException:
+                    import traceback
+                    traceback.print_exc()
+            if self.__aggregator is not None:
+                self.__aggregator.stop()
+                self.__flush_queue()
+
+import sys
 
 sys.modules[__name__] = Manager()

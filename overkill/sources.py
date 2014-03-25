@@ -20,6 +20,7 @@ from .base import Runnable, Publisher
 import select, os
 import time
 import pyinotify
+from . import manager
 
 __all__=("Source", "ThreadedSource", "get_timersource", "get_fdsource", "get_fwsource")
 
@@ -40,8 +41,10 @@ class Source(Runnable, Publisher):
         super().unsubscribe(*args, **kwargs)
         # Don't need to lock because stop will lock and check
         # running again.
-        if not self.subscriptions and self.running:
-            self.stop()
+        def later():
+            if not self.subscribers and self.running:
+                self.stop()
+        manager.queue(later)
 
 class InterruptableWaiter:
     def __init__(self):
@@ -79,7 +82,9 @@ class ThreadedSource(Source, Thread):
         raise NotImplementedError()
 
     def stop(self):
-        return super().stop()
+        ret = super().stop()
+        self.join()
+        return ret
 
 class FDManagerSource(ThreadedSource):
     def __init__(self):
@@ -154,7 +159,7 @@ class FWManagerSource(Source, pyinotify.ProcessEvent):
     def on_unsubscribe(self, subscriber, subscription):
         wdd = self.watches_reverse.pop((subscriber, subscription))
         for wd in wdd.values():
-            self.watches.remove(wd)
+            del self.watches[wd]
             self.wm.del_watch(wd)
 
     def process_default(self, event):
