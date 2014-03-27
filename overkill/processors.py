@@ -22,7 +22,6 @@ __all__=("Aggregator",)
 
 class Aggregator(Sink, Source):
     """ A Proxy Class to manage data sources """
-    agg = True
 
     def is_publishing(self, subscription):
         return self.who_publishes(subscription) is not None
@@ -40,7 +39,6 @@ class Aggregator(Sink, Source):
     def on_subscribe(self, subscriber, subscription):
         if subscription not in self.subscriptions:
             self.subscribe_to(subscription, self.who_publishes(subscription))
-
 
     def handle_updates(self, updates, source):
         self.push_updates(updates)
