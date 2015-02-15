@@ -64,6 +64,10 @@ class Manager:
             traceback.print_exc()
 
     def run(self):
+        import signal
+
+        signal.signal(signal.SIGTERM, lambda signal, frame: sys.exit(0))
+
         try:
             for sink in self.__sinks:
                 sink.start()
