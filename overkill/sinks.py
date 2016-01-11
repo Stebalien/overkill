@@ -123,7 +123,6 @@ class PipeSink(Subprocess, ReaderSink):
         return False
 
 class InotifySink(Sink):
-    recursive = False
     watches = []
 
     def handle_unsubscribe(self, subscription, source):
@@ -132,12 +131,12 @@ class InotifySink(Sink):
     def start(self):
         if super().start():
             for watch in self.watches:
-                self.watch(*watch)
+                self.watch(**watch)
             return True
         return False
 
-    def watch(self, *args):
-        self.subscribe_to(args, get_fwsource())
+    def watch(self, **args):
+        self.subscribe_to(frozenset(args.items()), get_fwsource())
     
     def handle_updates(self, updates, source):
         for sub, event in updates.items():
@@ -157,7 +156,7 @@ class FilecountSink(InotifySink):
         def start(self):
             if not self.watches:
                 all_events = self.add_events | self.remove_events
-                self.watches = [(wdir, all_events) for wdir in self.watchdirs]
+                self.watches = [{"path": wdir, "mask": all_events} for wdir in self.watchdirs]
             # Initialize Count
             # Asking for it initializes and sends it
             self.count

@@ -143,15 +143,15 @@ class FWManagerSource(Source, pyinotify.ProcessEvent):
         self.notifier.stop()
 
     def is_publishing(self, subscription):
+        sub = dict(subscription)
         try:
-            return isinstance(subscription[0], str) \
-                    and isinstance(subscription[1], int) \
-                    and subscription[0][0] == "/"
+            return sub['path'][0].startswith('/') \
+                    and isinstance(sub['mask'], int)
         except:
             return False
 
     def on_subscribe(self, subscriber, subscription):
-        wdd = self.wm.add_watch(*subscription)
+        wdd = self.wm.add_watch(**dict(subscription))
         for wd in wdd.values():
             self.watches[wd] = (subscriber, subscription)
         self.watches_reverse[(subscriber, subscription)] = wdd
