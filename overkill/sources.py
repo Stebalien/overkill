@@ -18,6 +18,7 @@
 from threading import Thread, Event
 from .base import Runnable, Publisher
 import select, os
+import fcntl
 import time
 import pyinotify
 from . import manager
@@ -97,32 +98,29 @@ class FDManagerSource(ThreadedSource):
 
     def run(self):
         while self.running:
-            updates = {}
             for f in self._waiter.select(self.subscribers.keys()):
+                if not f.peek():
+                    # EOF
+                    self.push_unsubscribe(f)
+                    continue
                 try:
-                    line = f.readline()
+                    while b'\n' in f.peek():
+                        line = f.readline()
+
+                        if not isinstance(line, str):
+                            line = line.decode('utf-8')
+
+                        self.push_updates({f: line.rstrip('\n')})
                 except:
                     self.push_unsubscribe(f)
-                    continue
-
-                # Empty line == EOF
-                if not line:
-                    self.push_unsubscribe(f)
-                    continue
-
-                if not isinstance(line, str):
-                    line = line.decode('utf-8')
-
-                updates[f] = line.rstrip('\n')
-
-            if updates:
-                self.push_updates(updates)
         self.running = False
 
     def on_stop(self):
         self._interrupt()
 
     def on_subscribe(self, subscriber, subscription):
+        flags = fcntl.fcntl(subscription.fileno(), fcntl.F_GETFD)
+        fcntl.fcntl(subscription.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
         self._interrupt()
 
     def _interrupt(self):

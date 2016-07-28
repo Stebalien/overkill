@@ -195,7 +195,7 @@ class Subprocess(Runnable):
         with self._state_lock:
             try:
                 if not (self.proc and self.proc.poll() is None):
-                    self.proc = subprocess.Popen(self.cmd, stderr=self.stderr, stdout=self.stdout, stdin=self.stdin)
+                    self.proc = subprocess.Popen(self.cmd, bufsize=1, stderr=self.stderr, stdout=self.stdout, stdin=self.stdin)
             except:
                 return False
             return True
