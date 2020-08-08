@@ -18,11 +18,11 @@
 from . import manager
 from threading import Lock
 from .exceptions import NotPublishingError, NoSourceError
-import subprocess, os
+import subprocess
+import os
 from time import time
 
-__all__=("Runnable", "Subscriber", "Publisher")
-
+__all__ = ("Runnable", "Subscriber", "Publisher")
 
 
 class Runnable:
@@ -55,6 +55,7 @@ class Runnable:
         self.on_stop()
         return True
 
+
 class Subscriber:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -83,8 +84,7 @@ class Subscriber:
     @manager.queued
     def receive_updates(self, updates, source):
         self.handle_updates(updates, source)
-            
-    
+
     def handle_updates(self, updates, source):
         raise NotImplementedError()
 
@@ -102,8 +102,10 @@ class Subscriber:
     def handle_unsubscribe(self, subscription, source):
         raise NotImplementedError("%s, %s" % (self, subscription))
 
+
 class Publisher:
     publishes = []
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.subscribers = {}
@@ -129,7 +131,7 @@ class Publisher:
 
     def on_subscribe(self, subscriber, subscription):
         pass
-    
+
     def on_unsubscribe(self, subscriber, subscription):
         pass
 
@@ -161,15 +163,16 @@ class Publisher:
         ):
             subscriber.receive_updates(updates, self)
 
+
 class Subprocess(Runnable):
     cmd = None
     proc = None
     restart = False
     max_restarts = 5
     start_limit_interval = 10
-    
-    stdout=stderr=open(os.devnull, 'wb')
-    stdin=None
+
+    stdout = stderr = open(os.devnull, 'wb')
+    stdin = None
 
     def start(self):
         if super().start():
@@ -195,7 +198,7 @@ class Subprocess(Runnable):
         with self._state_lock:
             try:
                 if not (self.proc and self.proc.poll() is None):
-                    self.proc = subprocess.Popen(self.cmd, bufsize=1, stderr=self.stderr, stdout=self.stdout, stdin=self.stdin)
+                    self.proc = subprocess.Popen(self.cmd, stderr=self.stderr, stdout=self.stdout, stdin=self.stdin)
             except:
                 return False
             return True
